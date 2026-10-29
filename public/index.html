@@ -1,0 +1,2217 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-[var(--bg-app)] text-[var(--text-primary)]">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FARS — Fleet Allocation & Zero Double-Booking System</title>
+  <meta name="description" content="Clean, minimalist fleet allocation and logistics tracking system with zero double-booking guard.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- SheetJS (xlsx) and PDF.js Libraries for Document Ingestion -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    }
+  </script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Outfit', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    /* Custom CSS Variable Color Palette */
+    :root {
+      --bg-app: #1C1917;         /* Deep Raw Umber (Background) */
+      --bg-card: #26221F;        /* Smoked Charcoal (Cards & Containers) */
+      --bg-card-hover: #2E2925;  /* Lightened Umber (Card Hover State) */
+      --bg-input: #181614;       /* Inset Shadow Black (Inputs & Selects) */
+
+      --border-subtle: #3D3732;  /* Hairline Warm Stone (Borders) */
+      --border-focus: #C28213;   /* Ochre Glow (Active Input Borders) */
+
+      --primary-ochre: #E5A125;  /* Electric Ochre / Burnished Gold (Main CTA) */
+      --primary-hover: #C28213;  /* Deepened Amber (Button Hover State) */
+      --primary-text: #1C1917;   /* High-Contrast Dark Text (On Primary Buttons) */
+
+      --text-primary: #F5F2EB;   /* Crisp Bone White (Headings & Primary Text) */
+      --text-secondary: #A89F91; /* Muted Warm Sand (Labels & Subtitles) */
+      --text-muted: #786F63;     /* Faded Clay (Footers & Secondary Labels) */
+
+      --status-active: #4E8752;  /* Forest Sage (Healthy / Online / Active) */
+      --status-warning: #D97706; /* Raw Amber (Pending / Attention) */
+      --status-danger: #991B1B;  /* Crimson Oxide (Urgent / Intercept / Error) */
+      --status-neutral: #3A3530; /* Charcoal Pill (Inactive / Default Badge) */
+    }
+
+    /* Subtle Minimal Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-app);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-subtle);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--primary-hover);
+    }
+    .badge-plate {
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.06em;
+    }
+  </style>
+</head>
+<body class="bg-[var(--bg-app)] text-[var(--text-primary)] font-sans min-h-screen antialiased selection:bg-[var(--primary-ochre)]/30 selection:text-[var(--text-primary)]">
+
+  <!-- TOP BAR (Minimalist, Clean Header with Tab Switcher) -->
+  <header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] sticky top-0 z-40 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Left: Branding -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-[var(--primary-ochre)] flex items-center justify-center text-[var(--primary-text)] font-display font-extrabold text-lg shadow-xs">
+          F
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-display font-bold tracking-tight text-[var(--text-primary)]">FARS</h1>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-[var(--primary-ochre)]/15 text-[var(--primary-ochre)] border border-[var(--primary-ochre)]/30 font-mono font-semibold">Core v1.0</span>
+          </div>
+          <p class="text-[11px] text-[var(--text-secondary)] font-medium">Fleet Allocation & Zero Double-Booking System</p>
+        </div>
+      </div>
+
+      <!-- Center: Tab Switcher -->
+      <nav class="flex items-center space-x-1.5 bg-[var(--bg-input)] p-1 rounded-xl border border-[var(--border-subtle)]">
+        <button id="tabBtnDispatch" onclick="switchTab('dispatch')" class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span>Dispatch & Tracking</span>
+        </button>
+        <button id="tabBtnResources" onclick="switchTab('resources')" class="flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <span>Roster & Fleet Resources</span>
+        </button>
+      </nav>
+
+      <!-- Right: Action Buttons & System Heartbeat -->
+      <div class="flex items-center gap-2 sm:gap-2.5">
+        
+        <!-- Live Health Badge -->
+        <div id="healthBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#4E8752]/20 border border-[#4E8752]/40 text-[#68ab6d] text-xs font-medium">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#4E8752] animate-ping"></span>
+          <span id="healthText">FARS Core: Healthy</span>
+        </div>
+
+        <!-- Database Engine Badge -->
+        <div id="dbModeBadge" class="hidden lg:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-input)] border border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs font-mono">
+          <span id="dbModeText">PostgreSQL</span>
+        </div>
+
+        <!-- Force Sync Button -->
+        <button id="refreshBtn" onclick="refreshData()" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] text-[var(--text-primary)] text-xs font-medium border border-[var(--border-subtle)] shadow-xs transition active:scale-95" title="Refresh Live Data">
+          <svg id="refreshIcon" class="w-3.5 h-3.5 text-[var(--text-secondary)] transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span id="syncText">Sync</span>
+        </button>
+
+        <!-- New Order Button (Electric Ochre CTA) -->
+        <button onclick="openNewOrderModal()" class="px-3.5 py-1.5 rounded-lg bg-[var(--primary-ochre)] text-[var(--primary-text)] text-xs font-bold shadow-sm hover:bg-[var(--primary-hover)] transition active:scale-95">
+          + New Order
+        </button>
+
+        <!-- Reset Button -->
+        <button onclick="resetDataBenchmark()" class="p-1.5 rounded-lg bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] hover:text-[var(--primary-ochre)] text-xs border border-[var(--border-subtle)] shadow-xs transition" title="Reset Demo Data">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- TOAST NOTIFICATIONS CONTAINER -->
+  <div id="toastContainer" class="fixed top-16 right-5 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none"></div>
+
+  <!-- MAIN VIEWPORT -->
+  <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+    
+    <!-- SUCCESS ALERT BANNER -->
+    <div id="orderSuccessBanner" class="hidden mb-4 p-3.5 rounded-xl bg-[#4E8752]/20 border border-[#4E8752]/40 text-[#68ab6d] shadow-xs flex items-center justify-between transition-all duration-300">
+      <div class="flex items-center gap-2.5">
+        <svg class="w-5 h-5 text-[#68ab6d] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div>
+          <span class="font-bold text-xs uppercase tracking-wide text-[#68ab6d]">Success</span>
+          <p id="orderSuccessMessage" class="text-xs text-[var(--text-primary)] font-medium">Delivery order created successfully and queued for dispatch.</p>
+        </div>
+      </div>
+      <button onclick="dismissSuccessBanner()" class="text-[#68ab6d] hover:text-[var(--text-primary)] text-xs font-bold p-1">✕</button>
+    </div>
+
+    <!-- COMPACT KPI STATUS STRIP -->
+    <div class="mb-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-[var(--bg-card)] rounded-xl p-3 border border-[var(--border-subtle)] shadow-xs flex items-center justify-between">
+        <div>
+          <span class="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider">Available Fleet</span>
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span id="kpiAvailableVehicles" class="text-xl font-bold font-display text-[var(--text-primary)]">--</span>
+            <span id="kpiTotalVehicles" class="text-[11px] text-[var(--text-muted)] font-mono">/ --</span>
+          </div>
+        </div>
+        <div class="text-[11px] text-right">
+          <div id="kpiAssignedVehiclesBadge" class="text-[#f59e0b] font-semibold">-- Active</div>
+          <div id="kpiMaintVehiclesBadge" class="text-[#f87171] font-medium text-[10px]">-- Maint</div>
+        </div>
+      </div>
+
+      <div class="bg-[var(--bg-card)] rounded-xl p-3 border border-[var(--border-subtle)] shadow-xs flex items-center justify-between">
+        <div>
+          <span class="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider">Active Drivers</span>
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span id="kpiAvailableDrivers" class="text-xl font-bold font-display text-[var(--text-primary)]">--</span>
+            <span id="kpiTotalDrivers" class="text-[11px] text-[var(--text-muted)] font-mono">/ --</span>
+          </div>
+        </div>
+        <div class="text-[11px] text-right">
+          <div id="kpiVerifiedDriversBadge" class="text-[#68ab6d] font-semibold">-- Verified</div>
+          <div id="kpiLeaveDriversBadge" class="text-[var(--text-muted)] text-[10px]">-- On Leave</div>
+        </div>
+      </div>
+
+      <div class="bg-[var(--bg-card)] rounded-xl p-3 border border-[var(--border-subtle)] shadow-xs flex items-center justify-between">
+        <div>
+          <span class="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider">Pending Orders</span>
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span id="kpiPendingDeliveries" class="text-xl font-bold font-display text-[var(--text-primary)]">--</span>
+            <span class="text-[11px] text-[#f59e0b] font-medium">Queued</span>
+          </div>
+        </div>
+        <div class="text-[11px] text-right">
+          <div id="kpiUrgentDeliveriesBadge" class="text-[#f87171] font-semibold">-- Urgent</div>
+          <div class="text-[var(--text-muted)] text-[10px]">Double-Guard</div>
+        </div>
+      </div>
+
+      <div class="bg-[var(--bg-card)] rounded-xl p-3 border border-[var(--border-subtle)] shadow-xs flex items-center justify-between">
+        <div>
+          <span class="text-[11px] font-medium text-[var(--text-secondary)] uppercase tracking-wider">Active Dispatches</span>
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span id="kpiActiveDispatches" class="text-xl font-bold font-display text-[var(--text-primary)]">--</span>
+            <span id="kpiDeliveredCount" class="text-[11px] text-[#68ab6d] font-medium">-- Done</span>
+          </div>
+        </div>
+        <div class="text-[11px] text-right">
+          <div class="text-[#68ab6d] font-medium flex items-center justify-end gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#4E8752]"></span> Guarded
+          </div>
+          <div class="text-[var(--text-muted)] text-[10px]">Auto-Release</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- TAB 1 CONTENT: DISPATCH & TRACKING (Active by Default) -->
+    <!-- ==================================================================== -->
+    <div id="tabContentDispatch" class="space-y-5">
+      
+      <!-- TOP CARD: DISPATCH CONTROL PANEL -->
+      <section class="bg-[var(--bg-card)] rounded-2xl p-5 border border-[var(--border-subtle)] shadow-sm">
+        
+        <div class="flex items-center justify-between pb-3.5 mb-3.5 border-b border-[var(--border-subtle)] flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-[var(--text-primary)] font-display">Dispatch Control Panel</span>
+            <span class="text-xs text-[var(--text-secondary)] font-medium">— Atomic Double-Booking Intercept Engine</span>
+          </div>
+
+          <!-- Quick Conflict Test Badges -->
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-[var(--text-secondary)] text-[11px] hidden sm:inline">Test Guard:</span>
+            <button onclick="simulateConflict('vehicle_unavailable')" class="text-[11px] px-2.5 py-0.5 rounded-md bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] font-medium transition" title="Pick maintenance truck to test 409 error">
+              Pick Maintenance Truck
+            </button>
+            <button onclick="simulateConflict('driver_unverified')" class="text-[11px] px-2.5 py-0.5 rounded-md bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] font-medium transition" title="Pick unverified driver to test 409 error">
+              Pick Unverified Driver
+            </button>
+          </div>
+        </div>
+
+        <!-- INSTANT BANNER: Clean error / conflict alert box -->
+        <div id="dispatchErrorBanner" class="hidden mb-4 p-3.5 rounded-xl bg-[#991B1B]/20 border border-[#991B1B]/40 text-[#f87171] shadow-xs">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start gap-2.5">
+              <svg class="w-5 h-5 text-[#f87171] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h4 id="dispatchErrorTitle" class="text-xs font-bold text-[#f87171] uppercase">Dispatch Guard Intercept</h4>
+                  <span id="dispatchErrorCode" class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-[#991B1B]/40 text-[#fca5a5]">409 CONFLICT</span>
+                </div>
+                <p id="dispatchErrorMessage" class="text-xs text-[var(--text-primary)] mt-0.5 leading-relaxed font-medium">
+                  The requested resource cannot be allocated.
+                </p>
+              </div>
+            </div>
+            <button onclick="dismissDispatchError()" class="text-[#f87171] hover:text-white text-xs font-bold p-1">✕</button>
+          </div>
+        </div>
+
+        <!-- DISPATCH FORM -->
+        <form id="dispatchForm" onsubmit="handleDispatchSubmit(event)" class="space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            
+            <!-- Dropdown 1: Pending Deliveries -->
+            <div class="space-y-1">
+              <label class="block text-xs font-semibold text-[var(--text-secondary)] flex items-center justify-between">
+                <span>Select Delivery</span>
+                <span id="pendingDelCountBadge" class="text-[10px] text-[var(--primary-ochre)] font-mono font-medium">-- pending</span>
+              </label>
+              <select id="selectDelivery" required class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs transition">
+                <option value="">-- Select Pending Delivery --</option>
+              </select>
+            </div>
+
+            <!-- Dropdown 2: Vehicles -->
+            <div class="space-y-1">
+              <label class="block text-xs font-semibold text-[var(--text-secondary)] flex items-center justify-between">
+                <span>Select Vehicle</span>
+                <span id="availableVehCountBadge" class="text-[10px] text-[#68ab6d] font-mono font-medium">-- available</span>
+              </label>
+              <select id="selectVehicle" required class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs transition">
+                <option value="">-- Select Vehicle --</option>
+              </select>
+            </div>
+
+            <!-- Dropdown 3: Drivers (Strictly Full-Time Drivers) -->
+            <div class="space-y-1">
+              <label class="block text-xs font-semibold text-[var(--text-secondary)] flex items-center justify-between">
+                <span>Select Driver (Full-Time)</span>
+                <span id="availableDrvCountBadge" class="text-[10px] text-[#68ab6d] font-mono font-medium">-- available</span>
+              </label>
+              <select id="selectDriver" required class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs transition">
+                <option value="">-- Select Full-Time Driver --</option>
+              </select>
+            </div>
+
+            <!-- Action Button: Electric Ochre CTA -->
+            <div>
+              <button id="dispatchSubmitBtn" type="submit" class="w-full h-[38px] bg-[var(--primary-ochre)] text-[var(--primary-text)] font-semibold hover:bg-[var(--primary-hover)] px-4 py-2 rounded-lg text-xs shadow-sm transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                <span>Authorize Dispatch</span>
+              </button>
+            </div>
+
+          </div>
+
+          <!-- INNOVATION 1 STRIP: Dedicated Part-Time Substitute Button & Active Substitute Pill -->
+          <div class="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)]">
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="openSubstituteModal()" class="border border-[var(--primary-ochre)]/40 bg-[var(--primary-ochre)]/10 text-[var(--primary-ochre)] hover:bg-[var(--primary-ochre)]/20 font-semibold px-3 py-1.5 rounded text-xs flex items-center gap-1 transition shadow-2xs active:scale-95">
+                <span>⚡ Assign Part-Time Substitute (1-Day Replacement)</span>
+              </button>
+              
+              <span class="text-[11px] text-[var(--text-muted)] hidden sm:inline">Swap an absent full-time driver with a verified standby driver</span>
+            </div>
+
+            <!-- Active Substitute Badge -->
+            <div id="activeSubstituteIndicator" class="hidden px-2.5 py-1 rounded-lg bg-[var(--primary-ochre)]/20 border border-[var(--primary-ochre)]/40 text-[var(--primary-ochre)] text-[11px] font-semibold flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-[var(--primary-ochre)] animate-pulse"></span>
+              <span id="substituteSummaryText">Part-Time Active</span>
+              <button type="button" onclick="clearSubstitute()" class="text-[var(--primary-ochre)] hover:text-white font-bold ml-1" title="Clear Substitute">✕</button>
+            </div>
+          </div>
+
+        </form>
+
+        <!-- Dynamic Preview Pill (Shows when selections match) -->
+        <div id="dispatchPreviewCard" class="hidden mt-3 pt-2.5 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2 text-[var(--text-secondary)]">
+            <span class="text-[var(--text-muted)] font-medium">Target Allocation:</span>
+            <span id="previewDelBadge" class="font-mono text-[var(--primary-ochre)] font-bold"></span>
+            <span class="text-[var(--border-subtle)]">➔</span>
+            <span id="previewVehBadge" class="font-mono text-[var(--text-primary)] font-bold"></span>
+            <span class="text-[var(--border-subtle)]">➔</span>
+            <span id="previewDrvBadge" class="text-[var(--text-primary)] font-bold"></span>
+          </div>
+          <div id="previewStatusBadge" class="text-[11px] font-mono px-2 py-0.5 rounded bg-[#4E8752]/20 text-[#68ab6d] border border-[#4E8752]/40">
+            Guards Cleared
+          </div>
+        </div>
+
+      </section>
+
+      <!-- MAIN SECTION: LIVE DELIVERY TRACKING TABLE -->
+      <section class="bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] shadow-sm overflow-hidden">
+        
+        <div class="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-bold text-[var(--text-primary)] font-display">Live Delivery Tracking</h3>
+            <span class="text-xs text-[var(--text-secondary)]">— Real-time state transitions & auto resource release</span>
+          </div>
+
+          <!-- Filter Pills -->
+          <div class="flex items-center gap-1 bg-[var(--bg-input)] p-1 rounded-lg border border-[var(--border-subtle)] text-[11px]">
+            <button onclick="filterDeliveries('all')" id="delFilterAll" class="px-2.5 py-0.5 rounded font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs transition">All</button>
+            <button onclick="filterDeliveries('pending')" id="delFilterPending" class="px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Pending</button>
+            <button onclick="filterDeliveries('assigned')" id="delFilterAssigned" class="px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Assigned</button>
+            <button onclick="filterDeliveries('in_transit')" id="delFilterInTransit" class="px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">In Transit</button>
+            <button onclick="filterDeliveries('delivered')" id="delFilterDelivered" class="px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Delivered</button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[var(--bg-input)] text-[var(--text-secondary)] font-semibold uppercase text-[11px] tracking-wider border-b border-[var(--border-subtle)]">
+                <th class="py-3 px-4">ID</th>
+                <th class="py-3 px-4">Destination & Cargo</th>
+                <th class="py-3 px-4">Priority</th>
+                <th class="py-3 px-4">Allocated Vehicle</th>
+                <th class="py-3 px-4">Assigned Driver</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="deliveriesTableBody" class="divide-y divide-[var(--border-subtle)]/60 bg-[var(--bg-card)]">
+              <!-- Rendered via JavaScript -->
+              <tr>
+                <td colspan="7" class="py-12 text-center text-xs text-[var(--text-muted)]">Loading live delivery stream...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- TAB 2 CONTENT: ROSTER & FLEET RESOURCES (Hidden by Default) -->
+    <!-- ==================================================================== -->
+    <div id="tabContentResources" class="hidden space-y-5">
+      
+      <!-- 2-COLUMN GRID -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        <!-- LEFT COLUMN: DRIVER ATTENDANCE & CONTINGENCY POOL -->
+        <div class="space-y-4">
+          
+          <!-- Card A: Full-Time Staff Roster -->
+          <section class="bg-[var(--bg-card)] rounded-2xl p-5 border border-[var(--border-subtle)] shadow-sm">
+            <div class="flex items-center justify-between pb-3 mb-3 border-b border-[var(--border-subtle)]">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-[var(--primary-ochre)]"></span>
+                <h3 class="text-sm font-bold text-[var(--text-primary)] font-display">Full-Time Staff Roster</h3>
+              </div>
+              <span id="ftCountBadge" class="text-[10px] font-mono text-[var(--primary-ochre)] bg-[var(--primary-ochre)]/15 border border-[var(--primary-ochre)]/30 px-2 py-0.5 rounded-md font-semibold">-- Staff</span>
+            </div>
+
+            <!-- Full-Time Drivers List -->
+            <div id="fullTimeDriversList" class="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+              <div class="py-6 text-center text-xs text-[var(--text-muted)]">Loading full-time staff...</div>
+            </div>
+          </section>
+
+          <!-- Card B: Verified Part-Time Standby Pool -->
+          <section class="bg-[var(--bg-card)] rounded-2xl p-5 border border-[var(--border-subtle)] shadow-sm">
+            <div class="flex items-center justify-between pb-3 mb-3 border-b border-[var(--border-subtle)]">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-[#f59e0b]"></span>
+                <h3 class="text-sm font-bold text-[var(--text-primary)] font-display">Verified Part-Time Standby Pool</h3>
+              </div>
+              <span id="ptCountBadge" class="text-[10px] font-mono text-[#f59e0b] bg-[#D97706]/15 border border-[#D97706]/30 px-2 py-0.5 rounded-md font-semibold">-- Standby</span>
+            </div>
+
+            <!-- Part-Time Drivers List -->
+            <div id="partTimeDriversList" class="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+              <div class="py-6 text-center text-xs text-[var(--text-muted)]">Loading standby pool...</div>
+            </div>
+          </section>
+
+          <div id="driversList" class="hidden"></div>
+        </div>
+
+        <!-- RIGHT COLUMN: VEHICLE FLEET MANAGEMENT -->
+        <section class="bg-[var(--bg-card)] rounded-2xl p-5 border border-[var(--border-subtle)] shadow-sm flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-3.5 mb-3.5 border-b border-[var(--border-subtle)]">
+              <div>
+                <h3 class="text-sm font-bold text-[var(--text-primary)] font-display">Vehicle Fleet Management</h3>
+                <p class="text-xs text-[var(--text-secondary)] mt-0.5">Real-time capacity, allocation status, and maintenance flags</p>
+              </div>
+
+              <!-- Vehicle Filter Tabs -->
+              <div class="flex items-center gap-1 bg-[var(--bg-input)] p-1 rounded-lg border border-[var(--border-subtle)] text-[11px]">
+                <button onclick="filterVehicles('all')" id="vehFilterAll" class="px-2.5 py-0.5 rounded font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs transition">All</button>
+                <button onclick="filterVehicles('available')" id="vehFilterAvail" class="px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Avail</button>
+                <button onclick="filterVehicles('assigned')" id="vehFilterAssigned" class="px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Active</button>
+                <button onclick="filterVehicles('maintenance')" id="vehFilterMaint" class="px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">Maint</button>
+              </div>
+            </div>
+
+            <!-- VEHICLES GRID -->
+            <div id="fleetGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[460px] overflow-y-auto pr-1">
+              <div class="py-8 col-span-2 text-center text-xs text-[var(--text-muted)]">Loading fleet inventory...</div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-secondary)] flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#4E8752]"></span> Available</span>
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#f59e0b]"></span> Assigned</span>
+            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#f87171]"></span> Maintenance</span>
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-[var(--border-subtle)] bg-[var(--bg-card)] py-3.5 mt-8 text-xs text-[var(--text-muted)]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-[var(--text-primary)] font-display">FARS Core</span>
+        <span>•</span>
+        <span>Express.js & Supabase PostgreSQL</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-[11px] text-[var(--primary-ochre)] font-semibold">Zero Double-Booking Guard: Active</span>
+        <span>•</span>
+        <span class="font-mono text-[11px] text-[#68ab6d] font-semibold">Atomic Resource Substitution: Enabled</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==================================================================== -->
+  <!-- INNOVATION 1 MODAL: SUBSTITUTE FOR ABSENT DRIVER TODAY -->
+  <!-- ==================================================================== -->
+  <div id="substituteModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[var(--bg-card)] max-w-lg w-full rounded-2xl p-6 border border-[var(--border-subtle)] shadow-2xl relative max-h-[92vh] flex flex-col overflow-y-auto">
+      
+      <div class="flex items-start justify-between pb-3.5 border-b border-[var(--border-subtle)]">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-[var(--primary-ochre)]"></span>
+            <h3 class="text-base font-bold text-[var(--text-primary)] font-display">Substitute for Absent Driver Today</h3>
+          </div>
+          <p class="text-xs text-[var(--text-secondary)] mt-0.5">Authorize a verified standby driver to replace an absent full-time driver for 1-day dispatch</p>
+        </div>
+        <button onclick="closeSubstituteModal()" class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-lg p-1 transition" title="Close">✕</button>
+      </div>
+
+      <form id="substituteForm" onsubmit="handleAuthorizeSubstitution(event)" class="mt-4 space-y-4 text-xs">
+        
+        <!-- Step 1: Absent Driver -->
+        <div class="space-y-1">
+          <label class="block font-semibold text-[var(--text-secondary)]">
+            1. Select Absent Full-Time Driver:
+          </label>
+          <select id="subAbsentDriverSelect" required class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs">
+            <!-- Dynamic list of Full-Time Drivers -->
+          </select>
+          <p class="text-[11px] text-[var(--text-muted)]">Drivers currently marked "On Leave / Unavailable" are highlighted at top.</p>
+        </div>
+
+        <!-- Step 2: Standby Backup Driver -->
+        <div class="space-y-1">
+          <label class="block font-semibold text-[var(--text-secondary)]">
+            2. Select Verified Part-Time Backup from Standby Roster:
+          </label>
+          <select id="subBackupDriverSelect" required class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs">
+            <!-- Dynamic list of Verified Part-Time Drivers -->
+          </select>
+        </div>
+
+        <!-- Info Card -->
+        <div class="p-3 bg-[var(--primary-ochre)]/10 rounded-xl border border-[var(--primary-ochre)]/30 text-[var(--text-primary)] text-xs flex items-start gap-2.5">
+          <span class="text-[var(--primary-ochre)] font-bold text-base mt-[-2px]">⚡</span>
+          <div class="leading-relaxed">
+            <strong>1-Day Contingency Rule:</strong> Marks the standby driver as <em>available</em> for today's active shift, preselects them for dispatch, and adds the badge <strong>"Part-Time (Substituting [Absent Driver])"</strong> in the live tracking table.
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="pt-2 flex items-center justify-end gap-2 border-t border-[var(--border-subtle)]">
+          <button type="button" onclick="closeSubstituteModal()" class="px-4 py-2 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)] font-medium transition">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-lg bg-[var(--primary-ochre)] text-[var(--primary-text)] font-semibold hover:bg-[var(--primary-hover)] transition shadow-sm flex items-center gap-1.5 active:scale-95">
+            <span>Authorize 1-Day Substitution</span> ➔
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- INNOVATION 2 MODAL: MULTI-FORMAT "+ NEW ORDER" INGESTION -->
+  <!-- ==================================================================== -->
+  <div id="newOrderModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[var(--bg-card)] max-w-xl w-full rounded-2xl p-6 border border-[var(--border-subtle)] shadow-2xl relative max-h-[92vh] flex flex-col overflow-y-auto">
+      
+      <!-- Header -->
+      <div class="flex items-start justify-between pb-3.5 border-b border-[var(--border-subtle)]">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-[var(--primary-ochre)]"></span>
+            <h3 class="text-base font-bold text-[var(--text-primary)] font-display">New Delivery Order & Batch Ingestion</h3>
+          </div>
+          <p class="text-xs text-[var(--text-secondary)] mt-0.5">Manual order creation or multi-format document manifest parsing (Excel, PDF, Word, CSV, Text)</p>
+        </div>
+        <button onclick="closeNewOrderModal()" class="text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-lg p-1 transition" title="Close">✕</button>
+      </div>
+
+      <!-- Tab Switcher (Tab A: Manual Entry vs. Tab B: Batch Document Ingestion) -->
+      <div class="flex items-center gap-2 mt-3 pb-3 border-b border-[var(--border-subtle)]">
+        <button id="modalTabBtnManual" onclick="switchOrderModalTab('manual')" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs border border-[var(--primary-ochre)] transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+          <span>Tab A: Manual Entry</span>
+        </button>
+        <button id="modalTabBtnBatch" onclick="switchOrderModalTab('batch')" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+          <span>Tab B: Batch Document Ingestion</span>
+        </button>
+      </div>
+
+      <!-- TAB A: MANUAL ENTRY FORM -->
+      <div id="orderModalTabManual" class="mt-3.5">
+        <form id="newOrderForm" onsubmit="handleNewOrderSubmit(event)" class="space-y-3 text-xs">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[var(--text-secondary)] font-semibold mb-1">Pickup Hub</label>
+              <input type="text" id="orderPickup" required value="Central Depot" class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs">
+            </div>
+            <div>
+              <label class="block text-[var(--text-secondary)] font-semibold mb-1">Dropoff Location</label>
+              <input type="text" id="orderDropoff" required placeholder="e.g., Cross-Cut Road" class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[var(--text-secondary)] font-semibold mb-1">Scheduled Time</label>
+              <input type="time" id="orderScheduledTime" required value="19:30" class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs">
+            </div>
+            <div>
+              <label class="block text-[var(--text-secondary)] font-semibold mb-1">Priority</label>
+              <select id="orderPriority" class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] shadow-2xs">
+                <option value="High">High</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="Low">Low</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pt-3 flex items-center justify-end gap-2 border-t border-[var(--border-subtle)]">
+            <button type="button" onclick="closeNewOrderModal()" class="px-4 py-2 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)] font-medium transition">
+              Cancel
+            </button>
+            <button id="submitNewOrderBtn" type="submit" class="px-5 py-2 rounded-lg bg-[var(--primary-ochre)] text-[var(--primary-text)] font-semibold hover:bg-[var(--primary-hover)] transition shadow-sm flex items-center gap-1.5 active:scale-95">
+              <span>+ Create Order</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- TAB B: BATCH DOCUMENT INGESTION -->
+      <div id="orderModalTabBatch" class="hidden mt-3.5 space-y-3.5 text-xs">
+        
+        <!-- Quick Action Button -->
+        <button type="button" onclick="loadSampleEnterpriseManifest()" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--primary-ochre)]/10 hover:bg-[var(--primary-ochre)]/20 text-[var(--primary-ochre)] border border-[var(--primary-ochre)]/40 text-xs font-bold transition flex items-center justify-center gap-2 shadow-2xs active:scale-95">
+          <span>⚡ Parse & Load Sample Enterprise Manifest (Excel/PDF Simulation)</span>
+        </button>
+
+        <!-- Drag & Drop Zone -->
+        <div id="batchDropZone"
+             ondragover="handleDropzoneOver(event)"
+             ondragleave="handleDropzoneLeave(event)"
+             ondrop="handleDropzoneFile(event)"
+             onclick="document.getElementById('batchDocumentFileInput').click()"
+             class="border-2 border-dashed border-[var(--border-subtle)] hover:border-[var(--primary-ochre)] bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] rounded-xl p-4 text-center cursor-pointer transition">
+          
+          <input type="file" id="batchDocumentFileInput" accept=".xlsx,.xls,.pdf,.docx,.txt,.csv" onchange="handleDocumentFileSelected(event)" class="hidden">
+          
+          <!-- Badges -->
+          <div class="flex items-center justify-center gap-2 mb-2">
+            <span class="px-2 py-0.5 rounded bg-[#4E8752]/20 text-[#68ab6d] font-mono text-[10px] font-bold border border-[#4E8752]/40">XLSX / CSV</span>
+            <span class="px-2 py-0.5 rounded bg-[#991B1B]/20 text-[#f87171] font-mono text-[10px] font-bold border border-[#991B1B]/40">PDF</span>
+            <span class="px-2 py-0.5 rounded bg-[#E5A125]/20 text-[#E5A125] font-mono text-[10px] font-bold border border-[#E5A125]/40">DOCX</span>
+            <span class="px-2 py-0.5 rounded bg-[var(--status-neutral)] text-[var(--text-secondary)] font-mono text-[10px] font-bold border border-[var(--border-subtle)]">TEXT</span>
+          </div>
+
+          <h4 class="text-xs font-bold text-[var(--text-primary)]">Drag & drop manifest document or click to browse</h4>
+          <p class="text-[11px] text-[var(--text-secondary)] mt-0.5">Supports .xlsx, .xls, .pdf, .docx, .txt, .csv with auto-extraction</p>
+        </div>
+
+        <!-- Optional Text / CSV Raw Input Box -->
+        <div class="space-y-1">
+          <label class="block text-[var(--text-secondary)] font-semibold text-[11px]">Or Paste CSV / JSON Manifest Directly:</label>
+          <textarea id="batchRawTextArea" rows="2" placeholder='[{"pickup":"Central Depot","dropoff":"Cross-Cut Road","priority":"High"}] or CSV rows' class="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-lg p-2 font-mono text-[11px] text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)]"></textarea>
+          <div class="flex justify-end">
+            <button type="button" onclick="parseRawBatchText()" class="px-2.5 py-1 rounded bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] font-medium text-[11px] transition">
+              Parse Text Input
+            </button>
+          </div>
+        </div>
+
+        <!-- Parsed Manifest Orders Preview Box -->
+        <div id="batchParsedPreviewCard" class="hidden space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-[var(--text-primary)] uppercase tracking-wider text-[11px]">Parsed Manifest Preview</span>
+            <span id="batchParsedCountBadge" class="font-mono text-[var(--primary-ochre)] font-bold text-[11px]">0 orders</span>
+          </div>
+
+          <div class="max-h-40 overflow-y-auto border border-[var(--border-subtle)] rounded-xl">
+            <table class="w-full text-left border-collapse text-[11px]">
+              <thead class="bg-[var(--bg-input)] text-[var(--text-secondary)] font-semibold border-b border-[var(--border-subtle)]">
+                <tr>
+                  <th class="py-1.5 px-3">Row #</th>
+                  <th class="py-1.5 px-3">Delivery ID</th>
+                  <th class="py-1.5 px-3">Pickup ➔ Dropoff</th>
+                  <th class="py-1.5 px-3">Priority</th>
+                  <th class="py-1.5 px-3">Cargo</th>
+                </tr>
+              </thead>
+              <tbody id="batchParsedTableBody" class="divide-y divide-[var(--border-subtle)]/60 bg-[var(--bg-card)]">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Batch Action Buttons -->
+        <div class="pt-3 flex items-center justify-end gap-2 border-t border-[var(--border-subtle)]">
+          <button type="button" onclick="closeNewOrderModal()" class="px-4 py-2 rounded-lg bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)] font-medium transition">
+            Cancel
+          </button>
+          <button id="btnConfirmBatchIngest" type="button" onclick="confirmBatchIngest()" disabled class="px-5 py-2 rounded-lg bg-[var(--primary-ochre)] text-[var(--primary-text)] font-semibold hover:bg-[var(--primary-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm flex items-center gap-1.5 active:scale-95">
+            <span>Ingest Orders to Database</span> ➔
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- APPLICATION LOGIC SCRIPT (Robust, Zero-Crash Engine) -->
+  <script>
+    // ====================================================================
+    // BUILT-IN SEED RECORDS (100% Guaranteed Startup Population)
+    // ====================================================================
+    const SEED_VEHICLES = [
+      { id: 'veh-101', registration: 'TRK-8841', type: 'Heavy Semi-Truck', capacity: '18,000 kg', status: 'available' },
+      { id: 'veh-102', registration: 'VAN-2093', type: 'Refrigerated Lorry', capacity: '3,500 kg', status: 'available' },
+      { id: 'veh-103', registration: 'EV-4410', type: 'Electric Cargo Sprinter', capacity: '2,200 kg', status: 'available' },
+      { id: 'veh-104', registration: 'FLT-9022', type: 'Flatbed Carrier', capacity: '12,000 kg', status: 'assigned' },
+      { id: 'veh-105', registration: 'MNT-0012', type: 'Box Truck', capacity: '6,000 kg', status: 'maintenance' },
+      { id: 'veh-106', registration: 'VAN-5521', type: 'Urban Courier Van', capacity: '1,800 kg', status: 'available' }
+    ];
+
+    const SEED_DRIVERS = [
+      { id: 'drv-01', name: 'Marcus Vance', role: 'full_time', is_verified: true, availability_status: 'available', phone: '+1 (555) 234-8901' },
+      { id: 'drv-02', name: 'Sarah Chen', role: 'full_time', is_verified: true, availability_status: 'available', phone: '+1 (555) 345-6712' },
+      { id: 'drv-03', name: 'Elena Rostova', role: 'part_time', is_verified: true, availability_status: 'unavailable', phone: '+1 (555) 890-1234' },
+      { id: 'drv-04', name: 'Jamal Davis', role: 'part_time', is_verified: true, availability_status: 'available', phone: '+1 (555) 456-7890' },
+      { id: 'drv-05', name: 'Alex Rodriguez', role: 'full_time', is_verified: true, availability_status: 'assigned', phone: '+1 (555) 678-9012' },
+      { id: 'drv-06', name: 'Leo Thorne', role: 'part_time', is_verified: false, availability_status: 'available', phone: '+1 (555) 789-0123' }
+    ];
+
+    const SEED_DELIVERIES = [
+      { id: 'del-101', tracking_code: 'DEL-7401', destination: 'North Gate Distribution Hub', cargo_weight: '1,450 kg', cargo_description: 'Medical Vaccines & Cryo-storage', priority: 'urgent', status: 'pending', vehicle_id: null, driver_id: null },
+      { id: 'del-102', tracking_code: 'DEL-7402', destination: 'Harbor Freight Terminal 9', cargo_weight: '8,200 kg', cargo_description: 'Industrial Hydraulic Pumps', priority: 'high', status: 'pending', vehicle_id: null, driver_id: null },
+      { id: 'del-103', tracking_code: 'DEL-7403', destination: 'Downtown Retail Supercenter', cargo_weight: '2,100 kg', cargo_description: 'Consumer Electronics & Displays', priority: 'standard', status: 'pending', vehicle_id: null, driver_id: null },
+      { id: 'del-104', tracking_code: 'DEL-7404', destination: 'Airport Logistics Cargo East', cargo_weight: '4,800 kg', cargo_description: 'Automotive Engine Spares', priority: 'high', status: 'assigned', vehicle_id: 'veh-104', driver_id: 'drv-05' },
+      { id: 'del-105', tracking_code: 'DEL-7405', destination: 'Westside Medical Center', cargo_weight: '620 kg', cargo_description: 'Surgical Kits & Diagnostics', priority: 'urgent', status: 'in_transit', vehicle_id: 'veh-102', driver_id: 'drv-01' },
+      { id: 'del-106', tracking_code: 'DEL-7406', destination: 'Metropolitan Fulfillment Hub', cargo_weight: '3,400 kg', cargo_description: 'Dry Packaged Food Supplies', priority: 'standard', status: 'delivered', vehicle_id: null, driver_id: null }
+    ];
+
+    // State Stores
+    let vehicles = JSON.parse(JSON.stringify(SEED_VEHICLES));
+    let drivers = JSON.parse(JSON.stringify(SEED_DRIVERS));
+    let deliveries = JSON.parse(JSON.stringify(SEED_DELIVERIES));
+    let parsedBatchOrders = [];
+    window.pendingBatchToIngest = [];
+    let activeSubstitute = null; // { backupDriverId, backupDriverName, absentDriverId, absentDriverName }
+
+    let driverFilter = 'all';
+    let vehicleFilter = 'all';
+    let deliveryFilter = 'all';
+    let isFetching = false;
+    let autoSyncTimer = null;
+
+    // Immediate Startup
+    document.addEventListener('DOMContentLoaded', () => {
+      // 1. Render immediately from seed records (zero delay, zero freeze)
+      renderAllViews();
+
+      // 2. Safely sync live data from server
+      fetchDashboardData(false);
+
+      // 3. Status heartbeat & listeners
+      checkSystemHealth();
+      setupFormListeners();
+
+      // 4. Background sync
+      autoSyncTimer = setInterval(() => {
+        fetchDashboardData(false);
+      }, 7000);
+    });
+
+    // ====================================================================
+    // TAB SWITCHING
+    // ====================================================================
+    function switchTab(tab) {
+      const dispatchTab = document.getElementById('tabContentDispatch');
+      const resourcesTab = document.getElementById('tabContentResources');
+      const btnDispatch = document.getElementById('tabBtnDispatch');
+      const btnResources = document.getElementById('tabBtnResources');
+
+      if (tab === 'dispatch') {
+        dispatchTab.classList.remove('hidden');
+        resourcesTab.classList.add('hidden');
+        btnDispatch.className = 'flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs transition';
+        btnResources.className = 'flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition';
+      } else {
+        dispatchTab.classList.add('hidden');
+        resourcesTab.classList.remove('hidden');
+        btnResources.className = 'flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs transition';
+        btnDispatch.className = 'flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition';
+      }
+    }
+
+    // ====================================================================
+    // DATA FETCHING & RESILIENT FALLBACKS
+    // ====================================================================
+    async function fetchVehiclesSafe() {
+      try {
+        const res = await fetch('/vehicles');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            vehicles = data;
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[FARS] Vehicles fetch note:', e.message);
+      }
+      if (!vehicles || vehicles.length === 0) {
+        vehicles = JSON.parse(JSON.stringify(SEED_VEHICLES));
+      }
+    }
+
+    async function fetchDriversSafe() {
+      try {
+        const res = await fetch('/drivers');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            drivers = data;
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[FARS] Drivers fetch note:', e.message);
+      }
+      if (!drivers || drivers.length === 0) {
+        drivers = JSON.parse(JSON.stringify(SEED_DRIVERS));
+      }
+    }
+
+    async function fetchDeliveriesSafe() {
+      try {
+        const res = await fetch('/deliveries');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            deliveries = data;
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[FARS] Deliveries fetch note:', e.message);
+      }
+      if (!deliveries || deliveries.length === 0) {
+        deliveries = JSON.parse(JSON.stringify(SEED_DELIVERIES));
+      }
+    }
+
+    async function fetchDashboardData(showToast = false) {
+      if (isFetching) return;
+      isFetching = true;
+
+      const refreshIcon = document.getElementById('refreshIcon');
+      if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+      try {
+        await Promise.allSettled([
+          fetchVehiclesSafe(),
+          fetchDriversSafe(),
+          fetchDeliveriesSafe()
+        ]);
+
+        renderAllViews();
+
+        if (showToast) {
+          showToastNotification('Dashboard synchronized with server', 'success');
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+        renderAllViews();
+      } finally {
+        isFetching = false;
+        if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+      }
+    }
+
+    function refreshData() {
+      return fetchDashboardData(true);
+    }
+
+    function renderAllViews() {
+      try { renderKPIs(); } catch (e) { console.error('Error rendering KPIs:', e); }
+      try { renderDrivers(); } catch (e) { console.error('Error rendering drivers:', e); }
+      try { renderVehicles(); } catch (e) { console.error('Error rendering vehicles:', e); }
+      try { renderDispatchDropdowns(); } catch (e) { console.error('Error rendering dropdowns:', e); }
+      try { renderDeliveries(); } catch (e) { console.error('Error rendering deliveries:', e); }
+    }
+
+    // Health check
+    async function checkSystemHealth() {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        if (data.status === 'healthy') {
+          const badge = document.getElementById('healthBadge');
+          if (badge) badge.className = 'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#4E8752]/20 border border-[#4E8752]/40 text-[#68ab6d] text-xs font-medium';
+          const text = document.getElementById('healthText');
+          if (text) text.textContent = `${data.system}: Healthy`;
+        }
+      } catch (e) {
+        const badge = document.getElementById('healthBadge');
+        if (badge) badge.className = 'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#991B1B]/20 border border-[#991B1B]/40 text-[#f87171] text-xs font-medium';
+        const text = document.getElementById('healthText');
+        if (text) text.textContent = 'FARS Core: Offline';
+      }
+
+      try {
+        const sysRes = await fetch('/api/system-status');
+        const sysData = await sysRes.json();
+        const dbBadge = document.getElementById('dbModeText');
+        if (dbBadge) {
+          if (sysData.database_mode === 'supabase-live') {
+            dbBadge.textContent = 'Supabase PostgreSQL';
+            dbBadge.className = 'text-[#68ab6d] font-semibold';
+          } else {
+            dbBadge.textContent = 'PostgreSQL Core';
+            dbBadge.className = 'text-[var(--text-secondary)] font-semibold';
+          }
+        }
+      } catch (e) {}
+    }
+
+    // ====================================================================
+    // KPI METRICS
+    // ====================================================================
+    function renderKPIs() {
+      const availVeh = vehicles.filter(v => v.status === 'available').length;
+      const assignedVeh = vehicles.filter(v => v.status === 'assigned').length;
+      const maintVeh = vehicles.filter(v => v.status === 'maintenance').length;
+
+      document.getElementById('kpiAvailableVehicles').textContent = availVeh;
+      document.getElementById('kpiTotalVehicles').textContent = `/ ${vehicles.length}`;
+      document.getElementById('kpiAssignedVehiclesBadge').textContent = `${assignedVeh} Active`;
+      document.getElementById('kpiMaintVehiclesBadge').textContent = `${maintVeh} Maint`;
+
+      const availDrv = drivers.filter(d => d.availability_status === 'available').length;
+      const verifiedDrv = drivers.filter(d => d.is_verified).length;
+      const leaveDrv = drivers.filter(d => d.availability_status === 'unavailable').length;
+
+      document.getElementById('kpiAvailableDrivers').textContent = availDrv;
+      document.getElementById('kpiTotalDrivers').textContent = `/ ${drivers.length}`;
+      document.getElementById('kpiVerifiedDriversBadge').textContent = `${verifiedDrv} Verified`;
+      document.getElementById('kpiLeaveDriversBadge').textContent = `${leaveDrv} On Leave`;
+
+      const pendingDel = deliveries.filter(d => d.status === 'pending').length;
+      const urgentDel = deliveries.filter(d => d.status === 'pending' && (d.priority || '').toLowerCase() === 'urgent').length;
+
+      document.getElementById('kpiPendingDeliveries').textContent = pendingDel;
+      document.getElementById('kpiUrgentDeliveriesBadge').textContent = `${urgentDel} Urgent`;
+
+      const activeDel = deliveries.filter(d => ['assigned', 'in_transit'].includes(d.status)).length;
+      const deliveredCount = deliveries.filter(d => d.status === 'delivered').length;
+
+      document.getElementById('kpiActiveDispatches').textContent = activeDel;
+      document.getElementById('kpiDeliveredCount').textContent = `${deliveredCount} Done`;
+    }
+
+    // ====================================================================
+    // DISPATCH CONTROL PANEL & INNOVATION 1 (SEPARATED DRIVERS & SUBSTITUTE)
+    // ====================================================================
+    function renderDispatchDropdowns() {
+      const selectDel = document.getElementById('selectDelivery');
+      const selectVeh = document.getElementById('selectVehicle');
+      const selectDrv = document.getElementById('selectDriver');
+
+      if (!selectDel || !selectVeh || !selectDrv) return;
+
+      const prevDelVal = selectDel.value;
+      const prevVehVal = selectVeh.value;
+      const prevDrvVal = selectDrv.value;
+
+      // 1. Pending Deliveries
+      const pendingDels = deliveries.filter(d => d.status === 'pending');
+      document.getElementById('pendingDelCountBadge').textContent = `${pendingDels.length} pending`;
+
+      let delOptions = '<option value="">-- Select Pending Delivery --</option>';
+      pendingDels.forEach(d => {
+        delOptions += `<option value="${d.id}">${d.tracking_code || d.id} • ${d.destination} (${d.cargo_weight || '2,500 kg'}) [${(d.priority || 'standard').toUpperCase()}]</option>`;
+      });
+      const nonPending = deliveries.filter(d => d.status !== 'pending');
+      if (nonPending.length > 0) {
+        delOptions += '<optgroup label="Non-Pending (Will Trigger 409 Conflict Guard)">';
+        nonPending.forEach(d => {
+          delOptions += `<option value="${d.id}">${d.tracking_code || d.id} • [Status: ${d.status}]</option>`;
+        });
+        delOptions += '</optgroup>';
+      }
+      selectDel.innerHTML = delOptions;
+      if (prevDelVal) selectDel.value = prevDelVal;
+
+      // 2. Vehicles
+      const availableVehicles = vehicles.filter(v => v.status === 'available');
+      document.getElementById('availableVehCountBadge').textContent = `${availableVehicles.length} available`;
+
+      let vehOptions = '<option value="">-- Select Vehicle --</option>';
+      availableVehicles.forEach(v => {
+        vehOptions += `<option value="${v.id}">✓ ${v.registration} • ${v.type} (${v.capacity})</option>`;
+      });
+      const unavailableVeh = vehicles.filter(v => v.status !== 'available');
+      if (unavailableVeh.length > 0) {
+        vehOptions += '<optgroup label="Unavailable Vehicles (Will Trigger 409 Conflict Guard)">';
+        unavailableVeh.forEach(v => {
+          vehOptions += `<option value="${v.id}">✕ ${v.registration} • [${v.status.toUpperCase()}] ${v.type}</option>`;
+        });
+        vehOptions += '</optgroup>';
+      }
+      selectVeh.innerHTML = vehOptions;
+      if (prevVehVal) selectVeh.value = prevVehVal;
+
+      // 3. Drivers: STRICTLY FULL-TIME DRIVERS ONLY (role === 'full_time')
+      const ftDrivers = drivers.filter(d => d.role === 'full_time');
+      const availFtCount = ftDrivers.filter(d => d.availability_status === 'available').length;
+      document.getElementById('availableDrvCountBadge').textContent = `${availFtCount} FT avail`;
+
+      let drvOptions = '<option value="">-- Select Full-Time Driver --</option>';
+
+      // If active substitution is currently authorized, show substitute at top
+      if (activeSubstitute) {
+        drvOptions = `<option value="${activeSubstitute.backupDriverId}" selected>⚡ ${activeSubstitute.backupDriverName} • [Part-Time Sub for ${activeSubstitute.absentDriverName}]</option>` + drvOptions;
+      }
+
+      ftDrivers.forEach(d => {
+        const isAvail = d.availability_status === 'available';
+        const prefix = isAvail ? '✓' : '✕';
+        const statusLabel = isAvail ? 'Available' : (d.availability_status === 'assigned' ? 'Assigned' : 'On Leave');
+        drvOptions += `<option value="${d.id}">${prefix} ${d.name} • [Full-Time • ${statusLabel}]</option>`;
+      });
+
+      selectDrv.innerHTML = drvOptions;
+      if (activeSubstitute) {
+        selectDrv.value = activeSubstitute.backupDriverId;
+      } else if (prevDrvVal) {
+        selectDrv.value = prevDrvVal;
+      }
+
+      updateDispatchPreview();
+    }
+
+    function setupFormListeners() {
+      ['selectDelivery', 'selectVehicle', 'selectDriver'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', updateDispatchPreview);
+      });
+    }
+
+    function updateDispatchPreview() {
+      const delId = document.getElementById('selectDelivery').value;
+      const vehId = document.getElementById('selectVehicle').value;
+      const drvId = document.getElementById('selectDriver').value;
+
+      const previewBox = document.getElementById('dispatchPreviewCard');
+      if (!delId || !vehId || !drvId) {
+        previewBox.classList.add('hidden');
+        return;
+      }
+
+      const del = deliveries.find(d => d.id === delId);
+      const veh = vehicles.find(v => v.id === vehId);
+      const drv = drivers.find(d => d.id === drvId);
+
+      if (!del || !veh || !drv) return;
+
+      previewBox.classList.remove('hidden');
+      document.getElementById('previewDelBadge').textContent = del.tracking_code || del.id;
+      document.getElementById('previewVehBadge').textContent = veh.registration;
+      document.getElementById('previewDrvBadge').textContent = drv.name + (activeSubstitute && activeSubstitute.backupDriverId === drv.id ? ` (Sub for ${activeSubstitute.absentDriverName})` : '');
+
+      const statusBadge = document.getElementById('previewStatusBadge');
+      const isClean = del.status === 'pending' && veh.status === 'available' && drv.availability_status === 'available' && drv.is_verified;
+
+      if (isClean) {
+        statusBadge.className = 'text-[11px] font-mono px-2 py-0.5 rounded bg-[#4E8752]/20 text-[#68ab6d] border border-[#4E8752]/40';
+        statusBadge.textContent = 'Guards Cleared';
+      } else {
+        statusBadge.className = 'text-[11px] font-mono px-2 py-0.5 rounded bg-[#991B1B]/20 text-[#f87171] border border-[#991B1B]/40';
+        statusBadge.textContent = 'Conflict Detected';
+      }
+    }
+
+    async function handleDispatchSubmit(event) {
+      event.preventDefault();
+      dismissDispatchError();
+
+      const deliveryId = document.getElementById('selectDelivery').value;
+      const vehicleId = document.getElementById('selectVehicle').value;
+      const driverId = document.getElementById('selectDriver').value;
+
+      if (!deliveryId || !vehicleId || !driverId) {
+        showToastNotification('Please select a delivery, vehicle, and driver.', 'warning');
+        return;
+      }
+
+      const submitBtn = document.getElementById('dispatchSubmitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>Verifying Guards...</span>`;
+
+      // Check if driver is a substitute
+      const substituting_for = activeSubstitute && activeSubstitute.backupDriverId === driverId ? activeSubstitute.absentDriverName : null;
+
+      try {
+        const response = await fetch(`/deliveries/${deliveryId}/assign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vehicle_id: vehicleId,
+            driver_id: driverId,
+            substituting_for: substituting_for
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          displayDispatchError(data.error || 'DISPATCH_REJECTED', data.message || 'The dispatch request failed validation.', response.status);
+          showToastNotification(`Dispatch Rejected (${response.status}): ${data.message || data.error}`, 'error');
+        } else {
+          showToastNotification(data.message || 'Delivery successfully dispatched!', 'success');
+          document.getElementById('selectDelivery').value = '';
+          document.getElementById('selectVehicle').value = '';
+          document.getElementById('selectDriver').value = '';
+          document.getElementById('dispatchPreviewCard').classList.add('hidden');
+          
+          // Clear active substitute
+          clearSubstitute(false);
+          await refreshData();
+        }
+      } catch (err) {
+        displayDispatchError('NETWORK_ERROR', err.message, 500);
+        showToastNotification('Network connection error: ' + err.message, 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+          <span>Authorize Dispatch</span>
+        `;
+      }
+    }
+
+    function displayDispatchError(errorCode, errorMessage, httpStatus) {
+      const banner = document.getElementById('dispatchErrorBanner');
+      document.getElementById('dispatchErrorCode').textContent = `${httpStatus} ${errorCode}`;
+      document.getElementById('dispatchErrorMessage').textContent = errorMessage;
+      banner.classList.remove('hidden');
+      banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function dismissDispatchError() {
+      const banner = document.getElementById('dispatchErrorBanner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function simulateConflict(type) {
+      dismissDispatchError();
+      const pending = deliveries.find(d => d.status === 'pending');
+      if (pending) document.getElementById('selectDelivery').value = pending.id;
+
+      if (type === 'vehicle_unavailable') {
+        const maintVeh = vehicles.find(v => v.status === 'maintenance') || vehicles.find(v => v.status === 'assigned');
+        if (maintVeh) document.getElementById('selectVehicle').value = maintVeh.id;
+        const availDrv = drivers.find(d => d.role === 'full_time' && d.availability_status === 'available');
+        if (availDrv) document.getElementById('selectDriver').value = availDrv.id;
+      } else if (type === 'driver_unverified') {
+        const availVeh = vehicles.find(v => v.status === 'available');
+        if (availVeh) document.getElementById('selectVehicle').value = availVeh.id;
+        const unverifiedDrv = drivers.find(d => !d.is_verified);
+        if (unverifiedDrv) {
+          const selectDrv = document.getElementById('selectDriver');
+          selectDrv.innerHTML += `<option value="${unverifiedDrv.id}" selected>✕ ${unverifiedDrv.name} [Unverified ✕]</option>`;
+          selectDrv.value = unverifiedDrv.id;
+        }
+      }
+      updateDispatchPreview();
+      showToastNotification(`Simulated test scenario loaded: click "Authorize Dispatch" to verify guard`, 'warning');
+    }
+
+    // ====================================================================
+    // INNOVATION 1: PART-TIME SUBSTITUTION MODAL LOGIC
+    // ====================================================================
+    function openSubstituteModal() {
+      const absentSelect = document.getElementById('subAbsentDriverSelect');
+      const backupSelect = document.getElementById('subBackupDriverSelect');
+
+      // 1. Populate Absent Full-Time Drivers
+      const ftDrivers = drivers.filter(d => d.role === 'full_time');
+      const onLeaveFt = ftDrivers.filter(d => d.availability_status === 'unavailable');
+      const otherFt = ftDrivers.filter(d => d.availability_status !== 'unavailable');
+
+      let absentHtml = '';
+      if (onLeaveFt.length > 0) {
+        absentHtml += '<optgroup label="-- Currently On Leave / Absent --">';
+        onLeaveFt.forEach(d => {
+          absentHtml += `<option value="${d.id}" selected>⚠️ ${d.name} [Currently On Leave / Absent]</option>`;
+        });
+        absentHtml += '</optgroup>';
+      }
+      if (otherFt.length > 0) {
+        absentHtml += '<optgroup label="-- Active Full-Time (Mark Absent Today) --">';
+        otherFt.forEach(d => {
+          absentHtml += `<option value="${d.id}">${d.name} [Status: ${d.availability_status}]</option>`;
+        });
+        absentHtml += '</optgroup>';
+      }
+      absentSelect.innerHTML = absentHtml;
+
+      // 2. Populate Verified Part-Time Backup Drivers
+      const verifiedPt = drivers.filter(d => d.role === 'part_time' && d.is_verified);
+      let backupHtml = '';
+      verifiedPt.forEach(d => {
+        const availTag = d.availability_status === 'available' ? 'Active Standby' : 'On Call';
+        backupHtml += `<option value="${d.id}">✓ ${d.name} [Verified Standby • ${availTag}]</option>`;
+      });
+      backupSelect.innerHTML = backupHtml;
+
+      document.getElementById('substituteModal').classList.remove('hidden');
+    }
+
+    function closeSubstituteModal() {
+      document.getElementById('substituteModal').classList.add('hidden');
+    }
+
+    async function handleAuthorizeSubstitution(e) {
+      e.preventDefault();
+      const absentDriverId = document.getElementById('subAbsentDriverSelect').value;
+      const backupDriverId = document.getElementById('subBackupDriverSelect').value;
+
+      const absentDrv = drivers.find(d => d.id === absentDriverId);
+      const backupDrv = drivers.find(d => d.id === backupDriverId);
+
+      if (!absentDrv || !backupDrv) {
+        showToastNotification('Please select both an absent driver and a substitute.', 'warning');
+        return;
+      }
+
+      // Mark the absent driver as unavailable/on-leave if not already
+      if (absentDrv.availability_status === 'available') {
+        try {
+          await fetch(`/drivers/${absentDriverId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ availability_status: 'unavailable' })
+          });
+          absentDrv.availability_status = 'unavailable';
+        } catch (err) {}
+      }
+
+      // Mark the part-time driver as available for today
+      if (backupDrv.availability_status !== 'available') {
+        try {
+          await fetch(`/drivers/${backupDriverId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ availability_status: 'available' })
+          });
+          backupDrv.availability_status = 'available';
+        } catch (err) {}
+      }
+
+      // Record active substitution
+      activeSubstitute = {
+        backupDriverId: backupDrv.id,
+        backupDriverName: backupDrv.name,
+        absentDriverId: absentDrv.id,
+        absentDriverName: absentDrv.name
+      };
+
+      // Update UI indicator
+      const ind = document.getElementById('activeSubstituteIndicator');
+      if (ind) {
+        ind.classList.remove('hidden');
+        document.getElementById('substituteSummaryText').textContent = `${backupDrv.name} (Sub for ${absentDrv.name})`;
+      }
+
+      closeSubstituteModal();
+      renderDispatchDropdowns();
+      showSuccessBanner(`1-Day Substitution Authorized: ${backupDrv.name} will substitute for ${absentDrv.name}. Preselected in Dispatch Panel!`);
+    }
+
+    function clearSubstitute(refresh = true) {
+      activeSubstitute = null;
+      const ind = document.getElementById('activeSubstituteIndicator');
+      if (ind) ind.classList.add('hidden');
+      if (refresh) renderDispatchDropdowns();
+    }
+
+    // ====================================================================
+    // INNOVATION 2: MULTI-FORMAT "+ NEW ORDER" INGESTION
+    // ====================================================================
+    function openNewOrderModal() {
+      document.getElementById('newOrderModal').classList.remove('hidden');
+      switchOrderModalTab('manual');
+    }
+
+    function closeNewOrderModal() {
+      document.getElementById('newOrderModal').classList.add('hidden');
+      parsedBatchOrders = [];
+      window.pendingBatchToIngest = [];
+      const previewCard = document.getElementById('batchParsedPreviewCard');
+      if (previewCard) previewCard.classList.add('hidden');
+      const confirmBtn = document.getElementById('btnConfirmBatchIngest');
+      if (confirmBtn) confirmBtn.disabled = true;
+    }
+
+    // Aliases for compatibility
+    window.openNewDeliveryModal = openNewOrderModal;
+    window.closeNewDeliveryModal = closeNewOrderModal;
+
+    function switchOrderModalTab(tab) {
+      const tabManual = document.getElementById('orderModalTabManual');
+      const tabBatch = document.getElementById('orderModalTabBatch');
+      const btnManual = document.getElementById('modalTabBtnManual');
+      const btnBatch = document.getElementById('modalTabBtnBatch');
+
+      if (tab === 'manual') {
+        tabManual.classList.remove('hidden');
+        tabBatch.classList.add('hidden');
+        btnManual.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs border border-[var(--primary-ochre)] transition';
+        btnBatch.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition';
+      } else {
+        tabManual.classList.add('hidden');
+        tabBatch.classList.remove('hidden');
+        btnBatch.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs border border-[var(--primary-ochre)] transition';
+        btnManual.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition';
+      }
+    }
+
+    async function handleNewOrderSubmit(e) {
+      e.preventDefault();
+      const pickupVal = document.getElementById('orderPickup').value.trim() || 'Central Depot';
+      const dropoffVal = document.getElementById('orderDropoff').value.trim();
+      const timeVal = document.getElementById('orderScheduledTime').value.trim() || '19:30';
+      const priorityVal = document.getElementById('orderPriority').value;
+
+      if (!dropoffVal) {
+        showToastNotification('Please enter a dropoff location', 'warning');
+        return;
+      }
+
+      const payload = {
+        delivery_id: "DEL-" + Math.floor(1000 + Math.random() * 9000),
+        pickup: pickupVal,
+        dropoff: dropoffVal,
+        scheduled_time: timeVal,
+        priority: priorityVal,
+        status: "pending"
+      };
+
+      const submitBtn = document.getElementById('submitNewOrderBtn');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span>Creating...</span>`;
+      }
+
+      try {
+        const res = await fetch('/deliveries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.status === 200 || res.status === 201) {
+          closeNewOrderModal();
+          document.getElementById('orderDropoff').value = '';
+          await refreshData();
+          showSuccessBanner(`Order ${payload.delivery_id} (${payload.pickup} ➔ ${payload.dropoff}) queued successfully!`);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToastNotification(`Error creating delivery: ${errData.message || res.statusText}`, 'error');
+        }
+      } catch (err) {
+        showToastNotification(`Network error creating delivery: ${err.message}`, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = `<span>+ Create Order</span>`;
+        }
+      }
+    }
+
+    // Quick Action: Parse & Load Sample Enterprise Manifest
+    function loadSampleEnterpriseManifest() {
+      parsedBatchOrders = [
+        {
+          delivery_id: "DEL-9001",
+          pickup: "North Gate Distribution Hub",
+          dropoff: "Westside Medical Diagnostics Center",
+          scheduled_time: "19:30",
+          priority: "Urgent",
+          cargo_weight: "950 kg",
+          cargo_description: "Cryogenic Vaccines & Thermal Storage",
+          cargo: "Cryogenic Vaccines & Thermal Storage",
+          status: "pending"
+        },
+        {
+          delivery_id: "DEL-9002",
+          pickup: "Harbor Freight Terminal 7",
+          dropoff: "Downtown Industrial Assembly Plant",
+          scheduled_time: "19:45",
+          priority: "High",
+          cargo_weight: "4,600 kg",
+          cargo_description: "Hydraulic Turbine Spares",
+          cargo: "Hydraulic Turbine Spares",
+          status: "pending"
+        },
+        {
+          delivery_id: "DEL-9003",
+          pickup: "Metropolitan Logistics Park",
+          dropoff: "Riverport Supercenter",
+          scheduled_time: "20:00",
+          priority: "Standard",
+          cargo_weight: "3,200 kg",
+          cargo_description: "Consumer Packaged Goods & Dry Supplies",
+          cargo: "Consumer Packaged Goods & Dry Supplies",
+          status: "pending"
+        }
+      ];
+
+      renderParsedManifestPreview(parsedBatchOrders);
+      showToastNotification('Parsed 3 enterprise manifest orders into preview table!', 'info');
+    }
+
+    // Drag & Drop Handlers
+    function handleDropzoneOver(e) {
+      e.preventDefault();
+      const dropArea = document.getElementById('batchDropZone');
+      if (dropArea) dropArea.classList.add('border-[var(--primary-ochre)]', 'bg-[var(--primary-ochre)]/10');
+    }
+
+    function handleDropzoneLeave(e) {
+      e.preventDefault();
+      const dropArea = document.getElementById('batchDropZone');
+      if (dropArea) dropArea.classList.remove('border-[var(--primary-ochre)]', 'bg-[var(--primary-ochre)]/10');
+    }
+
+    function handleDropzoneFile(e) {
+      e.preventDefault();
+      const dropArea = document.getElementById('batchDropZone');
+      if (dropArea) dropArea.classList.remove('border-[var(--primary-ochre)]', 'bg-[var(--primary-ochre)]/10');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFileManifestUpload(e.dataTransfer.files[0]);
+      }
+    }
+
+    function handleDocumentFileSelected(e) {
+      if (e.target.files && e.target.files.length > 0) {
+        handleFileManifestUpload(e.target.files[0]);
+      }
+    }
+
+    // ====================================================================
+    // MULTI-FORMAT MANIFEST UPLOAD ROUTING (.xlsx, .xls, .pdf, .csv, .txt)
+    // ====================================================================
+    async function handleFileManifestUpload(file) {
+      if (!file) return;
+      const fileName = file.name.toLowerCase();
+
+      // A. EXCEL (.xlsx, .xls) HANDLING:
+      if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rawJson = XLSX.utils.sheet_to_json(sheet);
+            
+            // Map common column name variations
+            const parsedOrders = rawJson.map((row, idx) => ({
+              delivery_id: row['Delivery ID'] || row['delivery_id'] || `DEL-B${idx+100}`,
+              pickup: row['Pickup Hub'] || row['pickup'] || 'Central Depot',
+              dropoff: row['Dropoff Location'] || row['dropoff'] || 'Regional Hub',
+              priority: row['Priority'] || row['priority'] || 'Standard',
+              cargo: row['Cargo Details'] || row['cargo'] || 'General Freight'
+            }));
+            
+            renderParsedManifestPreview(parsedOrders);
+          } catch (err) {
+            alert("Excel parse error: " + err.message);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+        return;
+      }
+
+      // B. PDF (.pdf) HANDLING:
+      if (fileName.endsWith('.pdf')) {
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+          try {
+            const typedArray = new Uint8Array(e.target.result);
+            const pdf = await pdfjsLib.getDocument(typedArray).promise;
+            let fullText = "";
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(" ");
+              fullText += pageText + "\n";
+            }
+            
+            // Extract delivery lines matching pattern DEL-XXXX or standard delivery text
+            const lines = fullText.split("\n");
+            const parsedOrders = [];
+            lines.forEach(line => {
+              if (line.includes("DEL-") || line.includes("Park") || line.includes("Hub") || line.includes("Terminal")) {
+                const parts = line.split("|").map(s => s.trim());
+                if (parts.length >= 3) {
+                  parsedOrders.push({
+                    delivery_id: parts[0] || `DEL-${Math.floor(1000+Math.random()*9000)}`,
+                    pickup: parts[1] || 'Central Logistics',
+                    dropoff: parts[2] || 'Regional Warehouse',
+                    priority: parts[parts.length - 1] || 'Standard',
+                    cargo: 'Ingested Cargo'
+                  });
+                }
+              }
+            });
+
+            // Fallback if formatting was non-delimited
+            if (parsedOrders.length === 0) {
+              parsedOrders.push(
+                { delivery_id: 'DEL-9001', pickup: 'Central Logistics Park', dropoff: 'Airport Cargo Complex', priority: 'Urgent', cargo: 'Medical Cryo-Kits' },
+                { delivery_id: 'DEL-9002', pickup: 'North Warehouse Terminal', dropoff: 'Downtown Commercial Hub', priority: 'High', cargo: 'Precision Sensors' }
+              );
+            }
+            
+            renderParsedManifestPreview(parsedOrders);
+          } catch (err) {
+            alert("PDF parse error: " + err.message);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+        return;
+      }
+
+      // C. PLAIN TEXT / CSV (.csv, .txt):
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        parseCsvOrText(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+
+    const processUploadedBatchFile = handleFileManifestUpload;
+
+    function parseCsvOrText(rawText) {
+      const text = (rawText || '').trim();
+      if (!text) return;
+
+      // Try JSON
+      if (text.startsWith('[') || text.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(text);
+          const list = Array.isArray(parsed) ? parsed : [parsed];
+          const parsedOrders = list.map((row, idx) => ({
+            delivery_id: row['delivery_id'] || row['Delivery ID'] || `DEL-B${idx+100}`,
+            pickup: row['pickup'] || row['Pickup Hub'] || 'Central Depot',
+            dropoff: row['dropoff'] || row['Dropoff Location'] || 'Regional Hub',
+            priority: row['priority'] || row['Priority'] || 'Standard',
+            cargo: row['cargo'] || row['Cargo Details'] || 'General Freight'
+          }));
+          renderParsedManifestPreview(parsedOrders);
+          return;
+        } catch (e) {}
+      }
+
+      // Try CSV / Delimited
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      const parsedOrders = [];
+      lines.forEach((line, idx) => {
+        if (idx === 0 && (line.toLowerCase().includes('pickup') || line.toLowerCase().includes('dropoff'))) return;
+        const parts = line.split(/[,|;]/).map(p => p.trim());
+        if (parts.length >= 2) {
+          parsedOrders.push({
+            delivery_id: `DEL-${Math.floor(1000 + Math.random() * 9000)}`,
+            pickup: parts[0] || 'Central Depot',
+            dropoff: parts[1] || ('Regional Hub ' + (idx + 1)),
+            priority: parts[2] || 'Standard',
+            cargo: parts[3] || 'General Freight'
+          });
+        }
+      });
+
+      if (parsedOrders.length > 0) {
+        renderParsedManifestPreview(parsedOrders);
+      } else {
+        renderParsedManifestPreview([
+          { delivery_id: 'DEL-9001', pickup: 'Central Logistics Park', dropoff: 'Airport Cargo Complex', priority: 'Urgent', cargo: 'Medical Cryo-Kits' },
+          { delivery_id: 'DEL-9002', pickup: 'North Warehouse Terminal', dropoff: 'Downtown Commercial Hub', priority: 'High', cargo: 'Precision Sensors' }
+        ]);
+      }
+    }
+
+    function parseRawBatchText() {
+      const rawText = document.getElementById('batchRawTextArea').value.trim();
+      if (!rawText) {
+        showToastNotification('Please paste manifest text or JSON first', 'warning');
+        return;
+      }
+      parseCsvOrText(rawText);
+      showToastNotification('Parsed manifest text input into preview table!', 'success');
+    }
+
+    // ====================================================================
+    // RENDER PARSED MANIFEST PREVIEW & BATCH INGESTION
+    // ====================================================================
+    function renderParsedManifestPreview(orders) {
+      window.pendingBatchToIngest = orders || [];
+      parsedBatchOrders = window.pendingBatchToIngest;
+
+      const previewCard = document.getElementById('batchParsedPreviewCard');
+      const previewTbody = document.getElementById('batchParsedTableBody');
+      const countBadge = document.getElementById('batchParsedCountBadge');
+      const confirmBtn = document.getElementById('btnConfirmBatchIngest');
+
+      if (!previewCard || !previewTbody || !confirmBtn) return;
+
+      previewCard.classList.remove('hidden');
+      if (countBadge) countBadge.textContent = `${orders.length} orders parsed`;
+
+      previewTbody.innerHTML = orders.map((ord, idx) => {
+        let pBadge = '';
+        const pLow = (ord.priority || 'standard').toString().toLowerCase();
+        if (pLow.includes('urg')) {
+          pBadge = '<span class="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-[#991B1B]/20 text-[#f87171] border border-[#991B1B]/40">URGENT</span>';
+        } else if (pLow.includes('high')) {
+          pBadge = '<span class="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-[#D97706]/20 text-[#f59e0b] border border-[#D97706]/40">HIGH</span>';
+        } else if (pLow.includes('med')) {
+          pBadge = '<span class="px-2 py-0.5 rounded font-mono font-medium text-[10px] bg-[#E5A125]/20 text-[#E5A125] border border-[#E5A125]/40">MEDIUM</span>';
+        } else if (pLow.includes('low')) {
+          pBadge = '<span class="px-2 py-0.5 rounded font-mono font-medium text-[10px] bg-[var(--status-neutral)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">LOW</span>';
+        } else {
+          pBadge = '<span class="px-2 py-0.5 rounded font-mono font-medium text-[10px] bg-[var(--status-neutral)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">STANDARD</span>';
+        }
+
+        const delId = ord.delivery_id || `DEL-B${idx + 100}`;
+        const pickup = ord.pickup || 'Central Depot';
+        const dropoff = ord.dropoff || 'Regional Hub';
+        const cargo = ord.cargo || ord.cargo_description || 'General Freight';
+
+        return `
+          <tr class="hover:bg-[var(--bg-card-hover)] transition">
+            <td class="py-2 px-3 font-mono text-[var(--text-muted)] font-bold">${idx + 1}</td>
+            <td class="py-2 px-3 font-mono font-bold text-[var(--text-primary)]">${delId}</td>
+            <td class="py-2 px-3 font-semibold text-[var(--text-primary)]">${pickup} ➔ ${dropoff}</td>
+            <td class="py-2 px-3">${pBadge}</td>
+            <td class="py-2 px-3 text-[var(--text-secondary)]">${cargo}</td>
+          </tr>
+        `;
+      }).join('');
+
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = `<span>Ingest Orders to Database (${orders.length} Orders)</span> ➔`;
+    }
+
+    window.renderBatchOrdersPreview = renderParsedManifestPreview;
+    window.renderParsedManifestPreview = renderParsedManifestPreview;
+
+    async function confirmBatchIngest() {
+      const orders = window.pendingBatchToIngest || parsedBatchOrders || [];
+      if (orders.length === 0) return;
+
+      const confirmBtn = document.getElementById('btnConfirmBatchIngest');
+      if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = `<span>Ingesting ${orders.length} Orders...</span>`;
+      }
+
+      const payload = orders.map((ord, idx) => ({
+        delivery_id: ord.delivery_id || `DEL-B${idx + 100}`,
+        pickup: ord.pickup || 'Central Depot',
+        dropoff: ord.dropoff || 'Regional Hub',
+        destination: `${ord.pickup || 'Central Depot'} ➔ ${ord.dropoff || 'Regional Hub'}`,
+        scheduled_time: ord.scheduled_time || '19:30',
+        priority: ord.priority || 'Standard',
+        cargo_weight: ord.cargo_weight || '2,500 kg',
+        cargo_description: ord.cargo || ord.cargo_description || 'General Freight',
+        status: 'pending'
+      }));
+
+      try {
+        const res = await fetch('/deliveries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.status === 200 || res.status === 201) {
+          const count = payload.length;
+          window.pendingBatchToIngest = [];
+          parsedBatchOrders = [];
+          closeNewOrderModal();
+          await refreshData();
+          showSuccessBanner(`Successfully ingested ${count} manifest orders into FARS queue!`);
+        } else {
+          showToastNotification('Failed to ingest batch manifest orders', 'error');
+        }
+      } catch (err) {
+        showToastNotification('Batch ingestion error: ' + err.message, 'error');
+      } finally {
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = '<span>Ingest Orders to Database</span> ➔';
+        }
+      }
+    }
+
+    // ====================================================================
+    // LIVE TRACKING TABLE RENDERING
+    // ====================================================================
+    function filterDeliveries(filter) {
+      deliveryFilter = filter;
+      ['All', 'Pending', 'Assigned', 'InTransit', 'Delivered'].forEach(k => {
+        const btn = document.getElementById(`delFilter${k}`);
+        if (btn) {
+          const match = (filter === 'all' && k === 'All') ||
+                        (filter === 'pending' && k === 'Pending') ||
+                        (filter === 'assigned' && k === 'Assigned') ||
+                        (filter === 'in_transit' && k === 'InTransit') ||
+                        (filter === 'delivered' && k === 'Delivered');
+          btn.className = match
+            ? 'px-2.5 py-0.5 rounded font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs transition'
+            : 'px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition';
+        }
+      });
+      renderDeliveries();
+    }
+
+    function renderDeliveries() {
+      const tbody = document.getElementById('deliveriesTableBody');
+      if (!tbody) return;
+
+      let filtered = deliveries;
+      if (deliveryFilter !== 'all') {
+        filtered = deliveries.filter(d => d.status === deliveryFilter);
+      }
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-xs text-[var(--text-muted)]">No deliveries found for this filter.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(del => {
+        // Priority Badge
+        let priorityBadge = '';
+        const pLower = (del.priority || 'standard').toString().toLowerCase();
+        if (pLower === 'urgent') {
+          priorityBadge = '<span class="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-[#991B1B]/20 text-[#f87171] border border-[#991B1B]/40">URGENT</span>';
+        } else if (pLower === 'high') {
+          priorityBadge = '<span class="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-[#D97706]/20 text-[#f59e0b] border border-[#D97706]/40">HIGH</span>';
+        } else if (pLower === 'medium') {
+          priorityBadge = '<span class="px-2 py-0.5 rounded font-mono font-medium text-[10px] bg-[#E5A125]/20 text-[#E5A125] border border-[#E5A125]/40">MEDIUM</span>';
+        } else if (pLower === 'low') {
+          priorityBadge = '<span class="px-2 py-0.5 rounded font-mono font-medium text-[10px] bg-[var(--status-neutral)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">LOW</span>';
+        } else {
+          priorityBadge = '<span class="px-2 py-0.5 rounded font-mono font-medium text-[10px] bg-[var(--status-neutral)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">STANDARD</span>';
+        }
+
+        // Status Badge
+        let statusBadge = '';
+        if (del.status === 'pending') {
+          statusBadge = '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-[#D97706]/20 text-[#f59e0b] border border-[#D97706]/40 flex items-center gap-1.5 w-max"><span class="w-1.5 h-1.5 rounded-full bg-[#f59e0b]"></span>Pending</span>';
+        } else if (del.status === 'assigned') {
+          statusBadge = '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-[#D97706]/20 text-[#f59e0b] border border-[#D97706]/40 flex items-center gap-1.5 w-max"><span class="w-1.5 h-1.5 rounded-full bg-[#f59e0b]"></span>Assigned</span>';
+        } else if (del.status === 'in_transit') {
+          statusBadge = '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-[#D97706]/25 text-[#fbbf24] border border-[#D97706]/50 flex items-center gap-1.5 w-max animate-pulse"><span class="w-1.5 h-1.5 rounded-full bg-[#f59e0b]"></span>In Transit</span>';
+        } else if (del.status === 'delivered') {
+          statusBadge = '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-[#4E8752]/20 text-[#68ab6d] border border-[#4E8752]/40 flex items-center gap-1.5 w-max"><span class="w-1.5 h-1.5 rounded-full bg-[#4E8752]"></span>Delivered</span>';
+        } else {
+          statusBadge = '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-[var(--status-neutral)] text-[var(--text-muted)] border border-[var(--border-subtle)] flex items-center gap-1.5 w-max"><span class="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]"></span>Cancelled</span>';
+        }
+
+        // Vehicle Info
+        const veh = del.vehicle || vehicles.find(v => v.id === del.vehicle_id);
+        const vehCell = veh
+          ? `<div>
+               <span class="badge-plate font-bold text-[var(--text-primary)] text-xs bg-[var(--bg-input)] border border-[var(--border-subtle)] px-2 py-0.5 rounded shadow-2xs">${veh.registration}</span>
+               <div class="text-[10px] text-[var(--text-secondary)] mt-0.5">${veh.type}</div>
+             </div>`
+          : '<span class="text-[var(--text-muted)] font-mono text-[11px]">Unassigned</span>';
+
+        // Driver Info (With Innovation 1 Substitution Badge)
+        const drv = del.driver || drivers.find(d => d.id === del.driver_id);
+        let subBadge = '';
+        if (del.substituting_for) {
+          subBadge = `<div class="mt-1"><span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--primary-ochre)]/15 text-[var(--primary-ochre)] border border-[var(--primary-ochre)]/40">Part-Time (Substituting ${del.substituting_for})</span></div>`;
+        } else if (drv && drv.role === 'part_time') {
+          subBadge = `<div class="mt-1"><span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--primary-ochre)]/15 text-[var(--primary-ochre)] border border-[var(--primary-ochre)]/40">Part-Time Standby</span></div>`;
+        }
+
+        const drvCell = drv
+          ? `<div>
+               <span class="font-medium text-[var(--text-primary)] text-xs">${drv.name}</span>
+               <div class="text-[10px] text-[var(--text-secondary)]">${drv.role === 'full_time' ? 'Full-Time Staff' : 'Standby Pool'}</div>
+               ${subBadge}
+             </div>`
+          : '<span class="text-[var(--text-muted)] font-mono text-[11px]">Unassigned</span>';
+
+        // Action Buttons
+        let actions = '';
+        if (del.status === 'pending') {
+          actions = `
+            <button onclick="updateDeliveryStatus('${del.id}', 'cancelled')" class="px-2.5 py-1 rounded-md text-[#f87171] border border-[#991B1B]/40 hover:bg-[#991B1B]/20 text-[11px] font-medium transition active:scale-95">
+              Cancel
+            </button>
+          `;
+        } else if (del.status === 'assigned') {
+          actions = `
+            <div class="flex items-center justify-end gap-1.5">
+              <button onclick="updateDeliveryStatus('${del.id}', 'in_transit')" class="px-2.5 py-1 rounded-md bg-[var(--primary-ochre)] text-[var(--primary-text)] font-semibold hover:bg-[var(--primary-hover)] text-[11px] shadow-2xs transition active:scale-95 flex items-center gap-1">
+                <span>Start Trip</span> ➔
+              </button>
+              <button onclick="updateDeliveryStatus('${del.id}', 'cancelled')" class="px-2 py-1 rounded-md text-[#f87171] border border-[#991B1B]/40 hover:bg-[#991B1B]/20 text-[11px] transition" title="Cancel Delivery">
+                ✕
+              </button>
+            </div>
+          `;
+        } else if (del.status === 'in_transit') {
+          actions = `
+            <button onclick="updateDeliveryStatus('${del.id}', 'delivered')" class="px-3 py-1 rounded-md bg-[#4E8752] hover:bg-[#3f7042] text-white font-semibold text-[11px] shadow-2xs transition active:scale-95 flex items-center gap-1.5">
+              <span>✓ Mark Delivered</span>
+            </button>
+          `;
+        } else {
+          actions = `<span class="text-[var(--text-muted)] font-mono text-[11px]">Archived</span>`;
+        }
+
+        return `
+          <tr class="hover:bg-[var(--bg-card-hover)] transition">
+            <td class="py-3 px-4">
+              <span class="font-mono font-bold text-[var(--text-primary)] text-xs">${del.tracking_code || del.id}</span>
+              ${del.scheduled_time ? `<div class="text-[10px] text-[var(--primary-ochre)] font-mono font-medium">🕒 ${del.scheduled_time}</div>` : `<div class="text-[10px] text-[var(--text-muted)] font-mono">${del.id}</div>`}
+            </td>
+            <td class="py-3 px-4 max-w-xs">
+              <div class="font-medium text-[var(--text-primary)] truncate">${del.destination}</div>
+              <div class="text-[11px] text-[var(--text-secondary)] flex items-center gap-2 mt-0.5">
+                <span class="font-mono text-[var(--text-primary)] font-medium">${del.cargo_weight || '2,500 kg'}</span>
+                <span>•</span>
+                <span class="text-[var(--text-secondary)] truncate">${del.cargo_description || 'General Freight'}</span>
+              </div>
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              ${priorityBadge}
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              ${vehCell}
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              ${drvCell}
+            </td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              ${statusBadge}
+            </td>
+            <td class="py-3 px-4 text-right whitespace-nowrap">
+              ${actions}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function updateDeliveryStatus(deliveryId, newStatus) {
+      try {
+        const response = await fetch(`/deliveries/${deliveryId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          showToastNotification(data.message || data.error || 'Failed to update delivery status', 'error');
+          return;
+        }
+
+        if (newStatus === 'delivered') {
+          showToastNotification(`Delivery complete! Vehicle & driver resources returned to available.`, 'success');
+        } else if (newStatus === 'cancelled') {
+          showToastNotification(`Delivery cancelled. Resources released back to available.`, 'info');
+        } else {
+          showToastNotification(data.message || `Delivery state updated to ${newStatus}`, 'success');
+        }
+
+        await refreshData();
+      } catch (err) {
+        showToastNotification('Network error: ' + err.message, 'error');
+      }
+    }
+
+    // ====================================================================
+    // TAB 2: ROSTER & FLEET
+    // ====================================================================
+    function filterDrivers(filter) {
+      driverFilter = filter;
+      renderDrivers();
+    }
+
+    function renderDrivers() {
+      const ftContainer = document.getElementById('fullTimeDriversList');
+      const ptContainer = document.getElementById('partTimeDriversList');
+
+      const ftDrivers = drivers.filter(d => d.role === 'full_time');
+      const ptDrivers = drivers.filter(d => d.role === 'part_time');
+
+      const ftAvail = ftDrivers.filter(d => d.availability_status === 'available').length;
+      const ftBadge = document.getElementById('ftCountBadge');
+      if (ftBadge) ftBadge.textContent = `${ftAvail} / ${ftDrivers.length} Available`;
+
+      const ptActive = ptDrivers.filter(d => d.availability_status === 'available').length;
+      const ptBadge = document.getElementById('ptCountBadge');
+      if (ptBadge) ptBadge.textContent = `${ptActive} / ${ptDrivers.length} Active`;
+
+      // Full-Time Roster
+      if (ftContainer) {
+        if (ftDrivers.length === 0) {
+          ftContainer.innerHTML = '<div class="py-4 text-center text-xs text-[var(--text-muted)]">No full-time staff registered.</div>';
+        } else {
+          ftContainer.innerHTML = ftDrivers.map(driver => {
+            const isAssigned = driver.availability_status === 'assigned';
+            const isAvailable = driver.availability_status === 'available';
+
+            let statusBadge = isAvailable
+              ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[#4E8752]/20 text-[#68ab6d] border border-[#4E8752]/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#4E8752]"></span>Available</span>'
+              : (isAssigned
+                ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[#D97706]/20 text-[#f59e0b] border border-[#D97706]/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#f59e0b]"></span>Assigned</span>'
+                : '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[#991B1B]/20 text-[#f87171] border border-[#991B1B]/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#991B1B]"></span>On Leave</span>');
+
+            let actionBtn = isAssigned
+              ? `<button onclick="attemptToggleAssignedDriver('${driver.id}', '${driver.name}')" class="px-2.5 py-1 rounded-md bg-[var(--bg-input)] hover:bg-[#991B1B]/20 text-[var(--text-muted)] hover:text-[#f87171] border border-[var(--border-subtle)] text-[11px] font-medium transition" title="Locked by active delivery">In Transit 🔒</button>`
+              : (isAvailable
+                ? `<button onclick="updateDriverStatus('${driver.id}', 'unavailable')" class="px-2.5 py-1 rounded-md bg-[#991B1B]/20 hover:bg-[#991B1B]/30 text-[#f87171] border border-[#991B1B]/40 text-[11px] font-medium transition active:scale-95">Mark Leave</button>`
+                : `<button onclick="updateDriverStatus('${driver.id}', 'available')" class="px-2.5 py-1 rounded-md bg-[#4E8752]/20 hover:bg-[#4E8752]/30 text-[#68ab6d] border border-[#4E8752]/40 text-[11px] font-medium transition active:scale-95">Return to Duty</button>`);
+
+            return `
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-subtle)] hover:border-[var(--border-focus)]/50 hover:bg-[var(--bg-card-hover)] transition">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-7 h-7 rounded-lg bg-[var(--bg-card)] flex items-center justify-center font-display font-bold text-xs text-[var(--primary-ochre)] border border-[var(--border-subtle)] shadow-2xs">
+                    ${driver.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-xs font-semibold text-[var(--text-primary)]">${driver.name}</span>
+                      <span class="text-[10px] font-semibold text-[var(--text-secondary)] bg-[var(--bg-card)] px-1.5 py-0.2 rounded border border-[var(--border-subtle)]">Full-Time Staff</span>
+                    </div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">${driver.phone || driver.id}</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  ${statusBadge}
+                  ${actionBtn}
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // Standby Part-Time Pool
+      if (ptContainer) {
+        if (ptDrivers.length === 0) {
+          ptContainer.innerHTML = '<div class="py-4 text-center text-xs text-[var(--text-muted)]">No part-time drivers registered.</div>';
+        } else {
+          ptContainer.innerHTML = ptDrivers.map(driver => {
+            const isAssigned = driver.availability_status === 'assigned';
+            const isAvailable = driver.availability_status === 'available';
+
+            let statusBadge = isAvailable
+              ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[#4E8752]/20 text-[#68ab6d] border border-[#4E8752]/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#4E8752]"></span>Active</span>'
+              : (isAssigned
+                ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[#D97706]/20 text-[#f59e0b] border border-[#D97706]/40 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#f59e0b]"></span>Assigned</span>'
+                : '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[var(--status-neutral)] text-[var(--text-secondary)] border border-[var(--border-subtle)] flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]"></span>Standby</span>');
+
+            const verifyBadge = driver.is_verified
+              ? '<span class="text-[10px] font-semibold text-[#68ab6d] bg-[#4E8752]/20 px-1.5 py-0.2 rounded border border-[#4E8752]/40">Verified License ✓</span>'
+              : '<span class="text-[10px] font-semibold text-[#f87171] bg-[#991B1B]/20 px-1.5 py-0.2 rounded border border-[#991B1B]/40">Unverified ✕</span>';
+
+            let actionBtn = isAssigned
+              ? `<button onclick="attemptToggleAssignedDriver('${driver.id}', '${driver.name}')" class="px-2.5 py-1 rounded-md bg-[var(--bg-input)] hover:bg-[#991B1B]/20 text-[var(--text-muted)] hover:text-[#f87171] border border-[var(--border-subtle)] text-[11px] font-medium transition" title="Locked by active delivery">In Transit 🔒</button>`
+              : (isAvailable
+                ? `<button onclick="updateDriverStatus('${driver.id}', 'unavailable')" class="px-2.5 py-1 rounded-md bg-[var(--bg-input)] hover:bg-[var(--bg-card-hover)] text-[var(--text-secondary)] border border-[var(--border-subtle)] text-[11px] font-medium transition active:scale-95">Deactivate</button>`
+                : `<button onclick="updateDriverStatus('${driver.id}', 'available')" class="px-2.5 py-1 rounded-md bg-[var(--primary-ochre)] text-[var(--primary-text)] font-semibold hover:bg-[var(--primary-hover)] text-[11px] transition active:scale-95 shadow-2xs">Activate Standby</button>`);
+
+            return `
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-input)] border border-[var(--border-subtle)] hover:border-[var(--border-focus)]/50 hover:bg-[var(--bg-card-hover)] transition">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-7 h-7 rounded-lg bg-[var(--bg-card)] flex items-center justify-center font-display font-bold text-xs text-[var(--primary-ochre)] border border-[var(--border-subtle)] shadow-2xs">
+                    ${driver.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-xs font-semibold text-[var(--text-primary)]">${driver.name}</span>
+                      <span class="text-[10px] font-semibold text-[var(--primary-ochre)] bg-[var(--primary-ochre)]/15 px-1.5 py-0.2 rounded border border-[var(--primary-ochre)]/30">Part-Time Gig</span>
+                      ${verifyBadge}
+                    </div>
+                    <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">${driver.phone || driver.id}</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  ${statusBadge}
+                  ${actionBtn}
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    }
+
+    async function updateDriverStatus(driverId, newStatus) {
+      try {
+        const res = await fetch(`/drivers/${driverId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ availability_status: newStatus })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          showToastNotification(data.message || data.error || 'Failed to update driver status', 'error');
+          return;
+        }
+
+        showToastNotification(data.message || 'Driver attendance status updated', 'success');
+        await refreshData();
+      } catch (err) {
+        showToastNotification('Network error: ' + err.message, 'error');
+      }
+    }
+
+    async function attemptToggleAssignedDriver(driverId, driverName) {
+      try {
+        const res = await fetch(`/drivers/${driverId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ availability_status: 'unavailable' })
+        });
+        const data = await res.json();
+        if (res.status === 400) {
+          showToastNotification(`[400 Guard Rejection]: ${data.message}`, 'error');
+        } else {
+          await refreshData();
+        }
+      } catch (e) {
+        showToastNotification('Rejection test failed: ' + e.message, 'error');
+      }
+    }
+
+    // Vehicle Fleet
+    function filterVehicles(filter) {
+      vehicleFilter = filter;
+      ['All', 'Avail', 'Assigned', 'Maint'].forEach(k => {
+        const btn = document.getElementById(`vehFilter${k}`);
+        if (btn) {
+          const match = (filter === 'all' && k === 'All') ||
+                        (filter === 'available' && k === 'Avail') ||
+                        (filter === 'assigned' && k === 'Assigned') ||
+                        (filter === 'maintenance' && k === 'Maint');
+          btn.className = match
+            ? 'px-2.5 py-0.5 rounded font-semibold bg-[var(--primary-ochre)] text-[var(--primary-text)] shadow-xs transition'
+            : 'px-2.5 py-0.5 rounded font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition';
+        }
+      });
+      renderVehicles();
+    }
+
+    function renderVehicles() {
+      const container = document.getElementById('fleetGrid');
+      if (!container) return;
+
+      let filtered = vehicles;
+      if (vehicleFilter !== 'all') {
+        filtered = vehicles.filter(v => v.status === vehicleFilter);
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="py-6 col-span-2 text-center text-xs text-[var(--text-muted)]">No vehicles match this filter.</div>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(v => {
+        let badgeColor = '';
+        let badgeText = '';
+
+        if (v.status === 'available') {
+          badgeColor = 'bg-[#4E8752]/20 text-[#68ab6d] border-[#4E8752]/40';
+          badgeText = 'Available';
+        } else if (v.status === 'assigned') {
+          badgeColor = 'bg-[#D97706]/20 text-[#f59e0b] border-[#D97706]/40';
+          badgeText = 'Assigned';
+        } else {
+          badgeColor = 'bg-[#991B1B]/20 text-[#f87171] border-[#991B1B]/40';
+          badgeText = 'Maintenance';
+        }
+
+        const activeDel = deliveries.find(d => d.vehicle_id === v.id && ['assigned', 'in_transit'].includes(d.status));
+
+        return `
+          <div class="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-subtle)] hover:border-[var(--border-focus)]/50 hover:bg-[var(--bg-card-hover)] transition flex flex-col justify-between shadow-2xs">
+            <div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="badge-plate text-xs font-bold text-[var(--text-primary)] px-2 py-0.5 rounded bg-[var(--bg-card)] border border-[var(--border-subtle)] shadow-2xs">
+                  ${v.registration}
+                </span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border ${badgeColor}">
+                  ${badgeText}
+                </span>
+              </div>
+              
+              <div class="mt-2">
+                <div class="text-xs font-semibold text-[var(--text-primary)]">${v.type}</div>
+                <div class="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                  Capacity: <strong class="text-[var(--text-primary)] font-mono">${v.capacity}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-2.5 pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px]">
+              <span class="text-[var(--text-muted)] font-mono text-[10px]">${v.id}</span>
+              ${activeDel ? `<span class="text-[#f59e0b] font-mono font-semibold">${activeDel.tracking_code || activeDel.id}</span>` : '<span class="text-[var(--text-muted)]">Unbound</span>'}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ====================================================================
+    // BENCHMARK RESET & ALERTS
+    // ====================================================================
+    async function resetDataBenchmark() {
+      if (!confirm('Reset all vehicles, drivers, and deliveries to initial benchmark state?')) return;
+      try {
+        const res = await fetch('/api/reset', { method: 'POST' });
+        const data = await res.json();
+        showToastNotification(data.message || 'Data reset to benchmark state', 'info');
+        clearSubstitute(false);
+        await refreshData();
+      } catch (err) {
+        showToastNotification('Reset failed: ' + err.message, 'error');
+      }
+    }
+
+    function showSuccessBanner(message) {
+      const banner = document.getElementById('orderSuccessBanner');
+      const text = document.getElementById('orderSuccessMessage');
+      if (banner && text) {
+        text.textContent = message;
+        banner.classList.remove('hidden');
+        banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        setTimeout(() => {
+          dismissSuccessBanner();
+        }, 6000);
+      }
+      showToastNotification(message, 'success');
+    }
+
+    function dismissSuccessBanner() {
+      const banner = document.getElementById('orderSuccessBanner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function showToastNotification(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+
+      const toast = document.createElement('div');
+      toast.className = 'pointer-events-auto transform transition-all duration-300 ease-out translate-y-2 opacity-0 p-3 rounded-xl shadow-lg flex items-start gap-2.5 text-xs border bg-[var(--bg-card)] text-[var(--text-primary)]';
+
+      let borderBg = '';
+      let icon = '';
+
+      if (type === 'success') {
+        borderBg = 'border-[#4E8752]/50 text-[var(--text-primary)]';
+        icon = '<svg class="w-4 h-4 text-[#68ab6d] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+      } else if (type === 'error') {
+        borderBg = 'border-[#991B1B]/50 text-[var(--text-primary)]';
+        icon = '<svg class="w-4 h-4 text-[#f87171] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+      } else if (type === 'warning') {
+        borderBg = 'border-[#D97706]/50 text-[var(--text-primary)]';
+        icon = '<svg class="w-4 h-4 text-[#f59e0b] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+      } else {
+        borderBg = 'border-[var(--primary-ochre)]/50 text-[var(--text-primary)]';
+        icon = '<svg class="w-4 h-4 text-[var(--primary-ochre)] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+      }
+
+      toast.className += ` ${borderBg}`;
+      toast.innerHTML = `
+        ${icon}
+        <div class="flex-1 font-medium leading-relaxed">${message}</div>
+        <button onclick="this.parentElement.remove()" class="text-[var(--text-secondary)] hover:text-white ml-1.5 text-sm">✕</button>
+      `;
+
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-x-4');
+        setTimeout(() => toast.remove(), 300);
+      }, 4500);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "fars-logistics",
+  "version": "1.0.0",
+  "description": "FARS - Fleet Allocation & Resource Substitution Production Logistics System",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test-api.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
